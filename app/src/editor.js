@@ -1,189 +1,203 @@
-// The editor: holds the cover state, wires the controls, and lets the user
-// drag a panel's photo to move it and scroll to zoom it. The preview canvas
-// always shows the live cover; export redraws it at full size.
+// Editor state: photos, per-panel transforms, layout, grade, size, caption.
+// Owns the preview canvas, drag and zoom on panels, and the full-size export.
+import { drawCover } from './cover.js';
+import { panelCount, panelsFor } from './layouts.js';
+import { loadCoverFonts } from './fonts.js';
 
-import { drawCover, defaultPanels } from './cover.js';
-import { LAYOUTS, LAYOUT_IDS, SIZES } from './layouts.js';
-import { GRADES, GRADE_IDS } from './grades.js';
-import { loadFonts } from './fonts.js';
+/** The post sizes the app exports, keyed by id. */
+export const SIZES = {
+  square: { id: 'square', name: '1080 x 1080', w: 1080, h: 1080 },
+  portrait: { id: 'portrait', name: '1080 x 1350', w: 1080, h: 1350 },
+  landscape: { id: 'landscape', name: '1920 x 1080', w: 1920, h: 1080 },
+};
 
-/** Loads an image from a URL, resolving once it can be drawn. */
-export function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
+/** Fresh panel slots for a layout, keeping each slot's photo where it fits.
+ * New slots start empty (photo null) so addPhoto fills them in order; the
+ * renderer falls back to alternating photos for empty slots. */
+function freshPanels(layoutId, oldPanels) {
+  const count = panelCount(layoutId);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const old = oldPanels[i];
+    out.push({ photo: old ? old.photo : null, scale: 1, dx: 0, dy: 0 });
+  }
+  return out;
 }
 
-export class Editor {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.photos = [];
-    this.photoNames = [];
-    this.layoutId = 'hero3';
-    this.gradeId = 'sunset';
-    this.sizeId = '1920x1080';
-    this.title = 'NEON SHORE';
-    this.subtitle = 'a Vice City story';
-    this.panels = defaultPanels(this.layoutId, 0);
-    this.selected = 0;
-    this.drag = null;
-    this.onchange = null;
+/** Creates the editor around a preview canvas. */
+export function createEditor(canvas) {
+  const state = {
+    photos: [],
+    panels: freshPanels('four', []),
+    layout: 'four',
+    grade: 'sunset',
+    size: 'landscape',
+    title: 'Neon Shore',
+    subtitle: 'a Vice City story',
+    selected: 0,
+  };
+
+  let fontsReady = loadCoverFonts();
+  let drag = null;
+
+  function sizeOf() {
+    return SIZES[state.size] ?? SIZES.landscape;
   }
 
-  get size() {
-    return SIZES.find((s) => s.id === this.sizeId) || SIZES[0];
-  }
-
-  /** Replaces the panel list when the layout or photo count changes. A panel
-   *  keeps its old photo when that photo still exists; an empty panel takes
-   *  the default assignment, so adding a photo fills the empty panels. */
-  resetPanels() {
-    const old = this.panels;
-    this.panels = defaultPanels(this.layoutId, this.photos.length);
-    for (let i = 0; i < Math.min(old.length, this.panels.length); i++) {
-      if (old[i].photo >= 0 && old[i].photo < this.photos.length) {
-        this.panels[i] = old[i];
-      }
+  /** Redraws the preview at the cover's own size. */
+  function redraw() {
+    const { w, h } = sizeOf();
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
     }
-    if (this.selected >= this.panels.length) this.selected = 0;
+    fontsReady.then(() => drawCover(canvas, state));
   }
 
-  /** Adds photos (File objects or {url, name} entries) and redraws. */
-  async addPhotos(items) {
-    for (const item of items) {
-      const url = item.url || URL.createObjectURL(item);
-      const img = await loadImage(url);
-      this.photos.push(img);
-      this.photoNames.push(item.name || `Photo ${this.photos.length}`);
-    }
-    this.resetPanels();
-    this.redraw();
+  function setLayout(id) {
+    state.layout = id;
+    state.panels = freshPanels(id, state.panels);
+    state.selected = 0;
+    redraw();
   }
 
-  /** Assigns photo `index` to the selected panel. */
-  assignToSelected(index) {
-    this.panels[this.selected] = { ...this.panels[this.selected], photo: index, scale: 1, ox: 0, oy: 0 };
-    this.redraw();
+  function setGrade(id) {
+    state.grade = id;
+    redraw();
   }
 
-  setLayout(id) {
-    if (!LAYOUTS[id]) return;
-    this.layoutId = id;
-    this.resetPanels();
-    this.redraw();
+  function setSize(id) {
+    state.size = id;
+    redraw();
   }
 
-  setGrade(id) {
-    if (!GRADES[id]) return;
-    this.gradeId = id;
-    this.redraw();
+  function setTitle(text) {
+    state.title = text;
+    redraw();
   }
 
-  setSize(id) {
-    if (!SIZES.find((s) => s.id === id)) return;
-    this.sizeId = id;
-    this.redraw();
+  function setSubtitle(text) {
+    state.subtitle = text;
+    redraw();
   }
 
-  redraw() {
-    const size = this.size;
-    if (this.canvas.width !== size.w || this.canvas.height !== size.h) {
-      this.canvas.width = size.w;
-      this.canvas.height = size.h;
-    }
-    drawCover(this.canvas, {
-      photos: this.photos,
-      panels: this.panels,
-      layoutId: this.layoutId,
-      gradeId: this.gradeId,
-      title: this.title,
-      subtitle: this.subtitle,
-    });
-    if (this.onchange) this.onchange();
+  /** Adds a loaded photo; fills the first empty slot, else the selected one. */
+  function addPhoto(img, name) {
+    const index = state.photos.length;
+    state.photos.push({ img, name });
+    const empty = state.panels.findIndex((p) => p.photo == null);
+    if (empty >= 0) state.panels[empty].photo = index;
+    else state.panels[state.selected].photo = index;
+    redraw();
+    return index;
   }
 
-  /** Which panel (index) contains canvas point (x, y), or -1. */
-  hitPanel(x, y) {
-    const w = this.canvas.width;
-    const h = this.canvas.height;
-    const panels = LAYOUTS[this.layoutId].panels(w, h);
-    for (let i = panels.length - 1; i >= 0; i--) {
-      const p = panels[i];
-      if (x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h) return i;
+  /** Puts a photo into the selected panel. */
+  function assignPhoto(photoIndex) {
+    if (!state.photos[photoIndex]) return;
+    state.panels[state.selected].photo = photoIndex;
+    redraw();
+  }
+
+  /** The panel under a canvas point, topmost first (tilted panels overlap). */
+  function hitPanel(px, py) {
+    const { w, h } = sizeOf();
+    const rects = panelsFor(state.layout, w, h);
+    for (let i = rects.length - 1; i >= 0; i--) {
+      const r = rects[i];
+      const cx = r.x + r.w / 2;
+      const cy = r.y + r.h / 2;
+      const cos = Math.cos(-r.rot);
+      const sin = Math.sin(-r.rot);
+      const dx = px - cx;
+      const dy = py - cy;
+      const lx = dx * cos - dy * sin;
+      const ly = dx * sin + dy * cos;
+      if (Math.abs(lx) <= r.w / 2 && Math.abs(ly) <= r.h / 2) return i;
     }
     return -1;
   }
 
-  /** Pointer position in canvas pixels. */
-  eventPoint(e) {
-    const rect = this.canvas.getBoundingClientRect();
+  /** Canvas coordinates of a pointer event. */
+  function toCanvas(e) {
+    const box = canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) * (this.canvas.width / rect.width),
-      y: (e.clientY - rect.top) * (this.canvas.height / rect.height),
+      x: ((e.clientX - box.left) / box.width) * canvas.width,
+      y: ((e.clientY - box.top) / box.height) * canvas.height,
     };
   }
 
-  /** Wires pointer drag (pan) and wheel (zoom) on the preview canvas. */
-  bindPointer() {
-    const canvas = this.canvas;
-    canvas.addEventListener('pointerdown', (e) => {
-      const pt = this.eventPoint(e);
-      const hit = this.hitPanel(pt.x, pt.y);
-      if (hit < 0) return;
-      this.selected = hit;
-      this.drag = { panel: hit, lastX: pt.x, lastY: pt.y };
-      canvas.setPointerCapture(e.pointerId);
-      if (this.onchange) this.onchange();
-    });
-    canvas.addEventListener('pointermove', (e) => {
-      if (!this.drag) return;
-      const pt = this.eventPoint(e);
-      const pan = this.panels[this.drag.panel];
-      pan.ox += pt.x - this.drag.lastX;
-      pan.oy += pt.y - this.drag.lastY;
-      this.drag.lastX = pt.x;
-      this.drag.lastY = pt.y;
-      this.redraw();
-    });
-    canvas.addEventListener('pointerup', () => { this.drag = null; });
-    canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const pt = this.eventPoint(e);
-      const hit = this.hitPanel(pt.x, pt.y);
-      if (hit < 0) return;
-      const pan = this.panels[hit];
-      const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
-      pan.scale = Math.min(4, Math.max(0.5, (pan.scale || 1) * factor));
-      this.selected = hit;
-      this.redraw();
-    }, { passive: false });
+  canvas.addEventListener('pointerdown', (e) => {
+    const p = toCanvas(e);
+    const hit = hitPanel(p.x, p.y);
+    if (hit < 0) return;
+    state.selected = hit;
+    const slot = state.panels[hit];
+    drag = { x: p.x, y: p.y, dx: slot.dx || 0, dy: slot.dy || 0 };
+    canvas.setPointerCapture(e.pointerId);
+    redraw();
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const p = toCanvas(e);
+    const slot = state.panels[state.selected];
+    slot.dx = drag.dx + (p.x - drag.x);
+    slot.dy = drag.dy + (p.y - drag.y);
+    redraw();
+  });
+
+  canvas.addEventListener('pointerup', () => {
+    drag = null;
+  });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const p = toCanvas(e);
+    const hit = hitPanel(p.x, p.y);
+    const slot = state.panels[hit >= 0 ? hit : state.selected];
+    const next = (slot.scale || 1) * Math.exp(-e.deltaY * 0.001);
+    slot.scale = Math.min(4, Math.max(1, next));
+    redraw();
+  }, { passive: false });
+
+  /** Draws the cover at full size and returns its PNG blob. */
+  async function exportBlob() {
+    await fontsReady;
+    const { w, h } = sizeOf();
+    const off = document.createElement('canvas');
+    off.width = w;
+    off.height = h;
+    drawCover(off, state);
+    return new Promise((resolve) => off.toBlob(resolve, 'image/png'));
   }
 
-  /** Draws the cover at full export size and downloads it as a PNG. */
-  exportPng() {
-    const size = this.size;
-    const off = document.createElement('canvas');
-    off.width = size.w;
-    off.height = size.h;
-    drawCover(off, {
-      photos: this.photos,
-      panels: this.panels,
-      layoutId: this.layoutId,
-      gradeId: this.gradeId,
-      title: this.title,
-      subtitle: this.subtitle,
-    });
-    return new Promise((resolve) => {
-      off.toBlob((blob) => {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `cover-${size.id}.png`;
-        a.click();
-        resolve(`cover-${size.id}.png`);
-      }, 'image/png');
-    });
+  /** Downloads the cover at full size. */
+  async function exportPNG(onSaved) {
+    const blob = await exportBlob();
+    const { w, h } = sizeOf();
+    const name = `cover-${w}x${h}.png`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (onSaved) onSaved(name);
+    return name;
   }
+
+  redraw();
+  return {
+    state,
+    redraw,
+    setLayout,
+    setGrade,
+    setSize,
+    setTitle,
+    setSubtitle,
+    addPhoto,
+    assignPhoto,
+    exportBlob,
+    exportPNG,
+  };
 }

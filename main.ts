@@ -1,11 +1,16 @@
-// Neon Coast, a gta6-cover-art-01 entry (Node 22, standard library only).
-// The app is the static files in this directory's app/ folder: index.html and
-// its ES modules, which run offline in a desktop browser with no network
-// request. This program hands the app in: it copies app/ and screenshots/
-// from beside this file into /output and writes /output/dossier.json, the
-// summary the judge reads, using the vendored make.fun library.
+// Neon Coast — a gta6-cover-art-01 entry (Node 22, standard library only).
+// The app lives in this directory's app/ folder: plain static files a desktop
+// browser loads offline (app/index.html and its ES modules, fonts under app/,
+// no library and no network request). This program hands the app in: it copies
+// app/ and screenshots/ from beside this file to /output and writes
+// /output/dossier.json, the summary the judge reads, with the vendored make.fun
+// library. The app itself is Neon Coast, a multi-panel GTA-style cover maker:
+// five layouts, four colour grades, per-panel crop and zoom, Anton and Pacifico
+// lettering, and PNG exports in 1080 x 1080, 1080 x 1350 and 1920 x 1080.
+// Its two sample photos (app/samples/) were made for make.fun with an image
+// model and are free to use.
 //
-// Try it locally with `node serve.ts`, then open http://localhost:8080.
+// Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
@@ -24,8 +29,8 @@ if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), joi
 
 // The scorer's own caps (reference/gate.json): only text_max_bytes shapes the
 // bytes; the others refuse an entry the scorer would refuse (more than 4
-// screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of
-// app files, in all, or a path under app/ over 1000 bytes: app/ counts beside
+// screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of app
+// files, in all, or a path under app/ over 1000 bytes: app/ counts beside
 // /output's own 1000-entry cap, its screenshots/ and dossier.json).
 writeFileSync(
   join(out, 'dossier.json'),

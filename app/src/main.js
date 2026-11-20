@@ -1,141 +1,114 @@
-// Wires the page: builds the pickers, loads photos, keeps the preview live,
-// exports the PNG. A `?shot=` query sets up a fixed scene for a screenshot
-// instead (./shots.js).
-
-import { Editor, loadImage } from './editor.js';
-import { LAYOUTS, LAYOUT_IDS, SIZES } from './layouts.js';
-import { GRADES, GRADE_IDS } from './grades.js';
-import { loadFonts } from './fonts.js';
+// Wires the page: the editor, its controls, and the ?shot= screenshot scenes.
+import { createEditor, SIZES } from './editor.js';
+import { LAYOUT_IDS, LAYOUT_NAMES } from './layouts.js';
+import { GRADE_IDS, GRADES } from './grades.js';
 import { runShot } from './shots.js';
 
-const canvas = document.getElementById('cover');
+const canvas = document.getElementById('preview');
+const editor = createEditor(canvas);
 const status = document.getElementById('status');
-const editor = new Editor(canvas);
 
-function buildPicker(el, items, active, onPick) {
-  for (const item of items) {
+/** Loads an image from a file, resolving to the image once it can be drawn. */
+function loadFileImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/** Builds a row of buttons from an id list, one active at a time. */
+function buttonRow(container, ids, names, current, onPick) {
+  container.textContent = '';
+  ids.forEach((id) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = item.label;
-    if (item.id === active) b.classList.add('active');
+    b.textContent = names[id] ?? id;
+    b.className = id === current ? 'active' : '';
     b.addEventListener('click', () => {
-      el.querySelectorAll('button').forEach((x) => x.classList.remove('active'));
+      container.querySelectorAll('button').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
-      onPick(item.id);
+      onPick(id);
     });
-    el.appendChild(b);
-  }
+    container.appendChild(b);
+  });
 }
 
-function buildLayoutPicker() {
-  buildPicker(
-    document.getElementById('layouts'),
-    LAYOUT_IDS.map((id) => ({ id, label: LAYOUTS[id].name })),
-    editor.layoutId,
-    (id) => editor.setLayout(id),
-  );
-}
+const layoutRow = document.getElementById('layouts');
+buttonRow(layoutRow, LAYOUT_IDS, LAYOUT_NAMES, editor.state.layout, (id) => editor.setLayout(id));
 
-function buildGradePicker() {
-  buildPicker(
-    document.getElementById('grades'),
-    GRADE_IDS.map((id) => ({ id, label: GRADES[id].name })),
-    editor.gradeId,
-    (id) => editor.setGrade(id),
-  );
-}
+const gradeRow = document.getElementById('grades');
+buttonRow(gradeRow, GRADE_IDS, Object.fromEntries(GRADE_IDS.map((id) => [id, GRADES[id].name])), editor.state.grade, (id) => editor.setGrade(id));
 
-function buildSizePicker() {
-  buildPicker(
-    document.getElementById('sizes'),
-    SIZES.map((s) => ({ id: s.id, label: s.label })),
-    editor.sizeId,
-    (id) => editor.setSize(id),
-  );
-}
+const sizeRow = document.getElementById('sizes');
+buttonRow(sizeRow, Object.keys(SIZES), Object.fromEntries(Object.values(SIZES).map((s) => [s.id, s.name])), editor.state.size, (id) => editor.setSize(id));
 
-/** Rebuilds the photo thumbnail strip; clicking a thumb assigns it to the
- *  selected panel. */
+/** The photo thumbnails: click one to put it in the selected panel. */
+const thumbs = document.getElementById('thumbs');
 function renderThumbs() {
-  const strip = document.getElementById('thumbs');
-  strip.innerHTML = '';
-  editor.photos.forEach((img, i) => {
-    const thumb = document.createElement('img');
-    thumb.src = img.src;
-    thumb.alt = editor.photoNames[i] || `Photo ${i + 1}`;
-    thumb.title = editor.photoNames[i] || `Photo ${i + 1}`;
-    const assigned = editor.panels[editor.selected] && editor.panels[editor.selected].photo === i;
-    if (assigned) thumb.classList.add('assigned');
-    thumb.addEventListener('click', () => {
-      editor.assignToSelected(i);
-      renderThumbs();
-    });
-    strip.appendChild(thumb);
+  thumbs.textContent = '';
+  editor.state.photos.forEach((p, i) => {
+    const t = document.createElement('button');
+    t.type = 'button';
+    t.className = 'thumb';
+    t.title = p.name;
+    const img = document.createElement('img');
+    img.src = p.img.src;
+    img.alt = p.name;
+    t.appendChild(img);
+    t.addEventListener('click', () => editor.assignPhoto(i));
+    thumbs.appendChild(t);
   });
 }
 
-/** Syncs the controls with the editor state (title, subtitle, active picker
- *  buttons), so a state set in code — e.g. a ?shot= scene — shows correctly. */
-function syncControls() {
-  // Only write a field when it differs, so typing in it never moves the caret.
-  const titleInput = document.getElementById('title');
-  if (titleInput.value !== editor.title) titleInput.value = editor.title;
-  const subtitleInput = document.getElementById('subtitle');
-  if (subtitleInput.value !== editor.subtitle) subtitleInput.value = editor.subtitle;
-  const mark = (el, active) => {
-    el.querySelectorAll('button').forEach((b) => {
-      b.classList.toggle('active', b.textContent === active);
-    });
-  };
-  mark(document.getElementById('layouts'), LAYOUTS[editor.layoutId].name);
-  mark(document.getElementById('grades'), GRADES[editor.gradeId].name);
-  const size = SIZES.find((s) => s.id === editor.sizeId);
-  if (size) mark(document.getElementById('sizes'), size.label);
-}
-
-editor.onchange = () => { renderThumbs(); syncControls(); };
-
-document.getElementById('photo').addEventListener('change', async (e) => {
-  const files = [...e.target.files];
-  if (!files.length) return;
-  await editor.addPhotos(files);
-  status.textContent = `${files.length} photo${files.length > 1 ? 's' : ''} loaded.`;
+document.getElementById('addPhotos').addEventListener('click', () => {
+  document.getElementById('photoFiles').click();
 });
 
-document.querySelectorAll('[data-sample]').forEach((btn) => {
-  btn.addEventListener('click', async () => {
-    const name = btn.dataset.sample;
-    await editor.addPhotos([{ url: `samples/${name}.jpg`, name }]);
-    status.textContent = `Sample "${name}" loaded.`;
+document.getElementById('photoFiles').addEventListener('change', async (e) => {
+  for (const file of e.target.files) {
+    const img = await loadFileImage(file);
+    editor.addPhoto(img, file.name);
+  }
+  renderThumbs();
+  e.target.value = '';
+});
+
+document.querySelectorAll('[data-sample]').forEach((b) => {
+  b.addEventListener('click', async () => {
+    const name = b.dataset.sample;
+    const img = new Image();
+    img.src = `samples/${name}.jpg`;
+    await img.decode();
+    editor.addPhoto(img, name);
+    renderThumbs();
   });
 });
 
-document.getElementById('title').addEventListener('input', (e) => {
-  editor.title = e.target.value;
-  editor.redraw();
-});
-document.getElementById('subtitle').addEventListener('input', (e) => {
-  editor.subtitle = e.target.value;
-  editor.redraw();
-});
+const titleInput = document.getElementById('title');
+const subtitleInput = document.getElementById('subtitle');
+titleInput.value = editor.state.title;
+subtitleInput.value = editor.state.subtitle;
+titleInput.addEventListener('input', () => editor.setTitle(titleInput.value));
+subtitleInput.addEventListener('input', () => editor.setSubtitle(subtitleInput.value));
+
 document.getElementById('export').addEventListener('click', async () => {
-  const name = await editor.exportPng();
+  status.textContent = 'Exporting…';
+  const name = await editor.exportPNG((n) => {
+    status.textContent = `Saved ${n}`;
+  });
   status.textContent = `Saved ${name}`;
 });
 
-const query = new URLSearchParams(location.search);
-const shot = query.get('shot');
-buildLayoutPicker();
-buildGradePicker();
-buildSizePicker();
-editor.bindPointer();
+/** Keeps the title inputs in step when a scene sets the state (the ?shot= mode). */
+editor.syncControls = () => {
+  titleInput.value = editor.state.title;
+  subtitleInput.value = editor.state.subtitle;
+  renderThumbs();
+};
 
+const shot = new URLSearchParams(location.search).get('shot');
 if (shot) {
-  await loadFonts();
-  await runShot(shot, query, editor);
-  renderThumbs();
-} else {
-  await loadFonts();
-  await editor.addPhotos([{ url: 'samples/pier.jpg', name: 'pier' }]);
-  renderThumbs();
+  runShot(shot, new URLSearchParams(location.search), editor).then(() => editor.syncControls());
 }

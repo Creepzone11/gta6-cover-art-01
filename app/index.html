@@ -8,49 +8,50 @@
 </head>
 <body>
 <main class="app">
-  <section class="controls" id="controls">
-    <h1>Neon Coast</h1>
-    <p class="tagline">Turn any photo and caption into a multi-panel poster cover. Photos never leave your machine.</p>
+  <section class="controls">
+    <h1>NEON COAST</h1>
+    <p>Turn any photo and caption into a multi-panel poster cover. Photos never leave your machine.</p>
 
-    <fieldset>
-      <legend>Photos</legend>
-      <label class="file-label">Add photos
-        <input id="photo" type="file" accept="image/*" multiple>
-      </label>
+    <section class="group">
+      <h2>Photos</h2>
+      <button id="addPhotos" type="button">Add photos</button>
+      <input id="photoFiles" type="file" accept="image/*" multiple hidden>
+      <p class="hint">Or try a sample:</p>
       <div class="samples">
-        <span>Or try a sample:</span>
         <button type="button" data-sample="pier">Pier</button>
         <button type="button" data-sample="boulevard">Boulevard</button>
       </div>
-      <div class="thumbs" id="thumbs" aria-label="Loaded photos"></div>
-      <p class="hint" id="panel-hint">Click a panel in the preview, then pick a photo for it. Drag a panel to move its photo, scroll to zoom.</p>
-    </fieldset>
+      <div id="thumbs" class="thumbs"></div>
+      <p class="hint">Click a panel in the preview, then pick a photo for it. Drag a panel to move its photo, scroll to zoom.</p>
+    </section>
 
-    <fieldset>
-      <legend>Caption</legend>
-      <label>Title <input id="title" type="text" maxlength="28" value="NEON SHORE"></label>
-      <label>Subtitle <input id="subtitle" type="text" maxlength="40" value="a Vice City story"></label>
-    </fieldset>
+    <section class="group">
+      <h2>Caption</h2>
+      <label>Title <input id="title" type="text" maxlength="40" value="Neon Shore"></label>
+      <label>Subtitle <input id="subtitle" type="text" maxlength="60" value="a Vice City story"></label>
+    </section>
 
-    <fieldset>
-      <legend>Layout</legend>
-      <div class="picker" id="layouts"></div>
-    </fieldset>
+    <section class="group">
+      <h2>Layout</h2>
+      <div id="layouts" class="row"></div>
+    </section>
 
-    <fieldset>
-      <legend>Colour grade</legend>
-      <div class="picker" id="grades"></div>
-    </fieldset>
+    <section class="group">
+      <h2>Grade</h2>
+      <div id="grades" class="row"></div>
+    </section>
 
-    <fieldset>
-      <legend>Export size</legend>
-      <div class="picker" id="sizes"></div>
-      <button id="export" type="button" class="export">Export PNG</button>
-      <p id="status" role="status"></p>
-    </fieldset>
+    <section class="group">
+      <h2>Size</h2>
+      <div id="sizes" class="row"></div>
+    </section>
+
+    <button id="export" type="button" class="export">Export PNG</button>
+    <p id="status" role="status"></p>
   </section>
+
   <section class="stage">
-    <canvas id="cover" width="1080" height="1080" aria-label="Cover preview"></canvas>
+    <canvas id="preview" width="1920" height="1080" aria-label="The cover preview"></canvas>
   </section>
 </main>
 <script type="module" src="./src/main.js"></script>

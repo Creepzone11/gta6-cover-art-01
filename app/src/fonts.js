@@ -1,18 +1,17 @@
-// Loads the vendored fonts (Anton for titles, Pacifico for the script
-// subtitle) so the canvas can draw with them. Both are SIL Open Font License
-// files under app/fonts/.
+// Loads the OFL fonts bundled under app/fonts/ so the canvas can draw with them.
+// Fonts are loaded once; every draw waits for them before painting text.
 
-let loaded = false;
+let loaded = null;
 
-/** Loads both fonts and resolves once they are usable on a canvas. */
-export async function loadFonts() {
-  if (loaded) return;
-  const anton = new FontFace('Anton', 'url(./fonts/Anton-Regular.ttf)');
-  const pacifico = new FontFace('Pacifico', 'url(./fonts/Pacifico-Regular.ttf)');
-  const [a, p] = await Promise.all([anton.load(), pacifico.load()]);
-  document.fonts.add(a);
-  document.fonts.add(p);
-  // Wait until the browser actually has them ready for measuring.
-  await Promise.all([document.fonts.load('40px Anton'), document.fonts.load('40px Pacifico')]);
-  loaded = true;
+export function loadCoverFonts() {
+  if (loaded) return loaded;
+  loaded = (async () => {
+    const anton = new FontFace('Anton', 'url(./fonts/Anton-Regular.ttf)');
+    const pacifico = new FontFace('Pacifico', 'url(./fonts/Pacifico-Regular.ttf)');
+    const [a, p] = await Promise.all([anton.load(), pacifico.load()]);
+    document.fonts.add(a);
+    document.fonts.add(p);
+    await document.fonts.ready;
+  })();
+  return loaded;
 }
