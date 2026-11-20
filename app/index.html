@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neon Coast — GTA-style Cover Maker</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main class="app">
+  <section class="controls" id="controls">
+    <h1>Neon Coast</h1>
+    <p class="tagline">Turn any photo and caption into a multi-panel poster cover. Photos never leave your machine.</p>
+
+    <fieldset>
+      <legend>Photos</legend>
+      <label class="file-label">Add photos
+        <input id="photo" type="file" accept="image/*" multiple>
+      </label>
+      <div class="samples">
+        <span>Or try a sample:</span>
+        <button type="button" data-sample="pier">Pier</button>
+        <button type="button" data-sample="boulevard">Boulevard</button>
+      </div>
+      <div class="thumbs" id="thumbs" aria-label="Loaded photos"></div>
+      <p class="hint" id="panel-hint">Click a panel in the preview, then pick a photo for it. Drag a panel to move its photo, scroll to zoom.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Caption</legend>
+      <label>Title <input id="title" type="text" maxlength="28" value="NEON SHORE"></label>
+      <label>Subtitle <input id="subtitle" type="text" maxlength="40" value="a Vice City story"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Layout</legend>
+      <div class="picker" id="layouts"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Colour grade</legend>
+      <div class="picker" id="grades"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Export size</legend>
+      <div class="picker" id="sizes"></div>
+      <button id="export" type="button" class="export">Export PNG</button>
+      <p id="status" role="status"></p>
+    </fieldset>
+  </section>
+  <section class="stage">
+    <canvas id="cover" width="1080" height="1080" aria-label="Cover preview"></canvas>
+  </section>
+</main>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
